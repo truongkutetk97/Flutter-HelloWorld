@@ -21,16 +21,57 @@ class MyApp extends StatelessWidget {
       title: 'Welcome to Flutter',
       home: Scaffold(
         appBar: AppBar(
-          title: const Text('Welcome tooo Flutter'),
+          title: const Center(
+            child: Text(
+              "MQTT Client Debug Console",
+              textAlign: TextAlign.center,
+            ),
+          ),
         ),
-        body: const Center(
-          child: Text('Hello '),
-        ),
+        body: const MyCustomForm(),
       ),
+    );
+    // );
+  }
+}
+// class MyApp extends StatelessWidget {
+//   const MyApp({super.key});
+
+//   @override
+//   Widget build(BuildContext context) {
+//     const appTitle = 'MqttClient DebugConsole';
+//     return MaterialApp(
+//       title: appTitle,
+//       home: Scaffold(
+//         appBar: AppBar(
+//           title: const Text(appTitle),
+//         ),
+//         body: const MyCustomForm(),
+//       ),
+//     );
+//   }
+// }
+
+class MyCustomForm extends StatelessWidget {
+  const MyCustomForm({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: const <Widget>[
+        Padding(
+            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+            child: TextField(
+              decoration: InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'Please input the Server Address',
+              ),
+            ))
+      ],
     );
   }
 }
-
 // final client = MqttServerClient.withPort('34.126.97.74', '', 1883);
 
 // var pongCount = 0; // Pong counter
