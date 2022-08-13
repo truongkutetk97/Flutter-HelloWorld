@@ -2,14 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// ignore_for_file: equal_elements_in_set
+
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
+import 'package:dart_ping/dart_ping.dart';
 
 void main() {
+  debugPrint("Process started");
+
   runApp(const MyApp());
+  debugPrint("Process ended");
 }
 
 class MyApp extends StatelessWidget {
@@ -28,49 +34,211 @@ class MyApp extends StatelessWidget {
             ),
           ),
         ),
-        body: const MyCustomForm(),
+        // body: const InputFormWidget(),
+        body: Column(
+          children: [InputFormWidget(), ConsoleWidget()],
+        ),
       ),
     );
     // );
   }
 }
-// class MyApp extends StatelessWidget {
-//   const MyApp({super.key});
 
-//   @override
-//   Widget build(BuildContext context) {
-//     const appTitle = 'MqttClient DebugConsole';
-//     return MaterialApp(
-//       title: appTitle,
-//       home: Scaffold(
-//         appBar: AppBar(
-//           title: const Text(appTitle),
-//         ),
-//         body: const MyCustomForm(),
-//       ),
-//     );
-//   }
-// }
+class ConsoleWidget extends StatefulWidget {
+  const ConsoleWidget({Key? key}) : super(key: key);
 
-class MyCustomForm extends StatelessWidget {
-  const MyCustomForm({super.key});
+  @override
+  State<ConsoleWidget> createState() => ConsoleWindows();
+}
+
+class ConsoleWindows extends State<ConsoleWidget> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   @override
   Widget build(BuildContext context) {
+    debugPrint("ConsoleWindows");
+
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      key: _formKey,
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: const <Widget>[
         Padding(
             padding: EdgeInsets.symmetric(horizontal: 8, vertical: 16),
             child: TextField(
               decoration: InputDecoration(
                 border: OutlineInputBorder(),
-                hintText: 'Please input the Server Address',
+                hintText: 'mqtt console',
               ),
             ))
       ],
     );
   }
+}
+
+class InputFormWidget extends StatefulWidget {
+  const InputFormWidget({Key? key}) : super(key: key);
+
+  @override
+  State<InputFormWidget> createState() => MyCustomForm();
+}
+
+class MyCustomForm extends State<InputFormWidget> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+
+  List<int> ipStat = [0, 0, 0, 0, 0, 0];
+  int state = 0;
+  String buttonText = "Connect";
+  int connectionStat = 0; //1 connected
+  int newWidgetCreated = 0;
+  @override
+  Widget build(BuildContext context) {
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          TextFormField(
+            decoration: const InputDecoration(
+              label: Center(
+                child: Text("Enter server address  "),
+              ),
+              hintText: 'Example: 34.126.97.74,8884',
+              floatingLabelBehavior: FloatingLabelBehavior.always,
+              // contentPadding: EdgeInsets.zero,
+              // alignLabelWithHint: true,
+            ),
+            textAlign: TextAlign.center,
+            keyboardType: TextInputType.number,
+            validator: (String? value) {
+              if (value?.length == 0) {
+                value = '34.126.97.74,8884';
+              }
+              debugPrint("checking ipaddress");
+              ipStat = checkIpAddress(value);
+              int ipValid = ipStat[0];
+              debugPrint("ipstat =  $ipValid");
+              if (value == null || value.isEmpty || ipValid == 0) {
+                debugPrint("return invalid validator");
+                return 'Please enter valid IP address:port';
+              }
+              return null;
+            },
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16.0),
+            child: ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  buttonText = "Connecting";
+                });
+
+                // Validate will return true if the form is valid, or false if
+                // the form is invalid.
+                if (_formKey.currentState!.validate()) {
+                  // Process data.
+                  debugPrint("IP has valid");
+                  String targetIp =
+                      '${ipStat[1]}.${ipStat[2]}.${ipStat[3]}.${ipStat[4]}';
+                  debugPrint(targetIp);
+                  String fakeIp = "192.168.3.3";
+                  final stream = Ping(targetIp, count: 3, timeout: 2);
+                  debugPrint("Pinging google.com");
+                  int pingCount = 0;
+                  stream.stream.listen((d) {
+                    debugPrint(d.toString());
+                    Future.delayed(Duration(seconds: 3), () {
+                      pingCount += 1;
+                      int? time = d.response?.time?.inMilliseconds;
+                      debugPrint("rsult$pingCount = $time");
+                      if (time != null) {
+                        setState(() {
+                          buttonText = "Connected";
+                          connectionStat = 1;
+                        });
+                        if (newWidgetCreated == 0) {
+                          const ConsoleWidget();
+                          newWidgetCreated = 1;
+                        }
+
+                        debugPrint("Connectedddddddd");
+                      } else if (pingCount == 3) {
+                        setState(() {
+                          buttonText = "Timeout, Retry?";
+                        });
+                      } else if (d.error?.error == ErrorType.unknownHost) {
+                        setState(() {
+                          buttonText = "Timeout, Retry?";
+                        });
+                      }
+                      debugPrint(d.error?.error.toString());
+                    });
+                  });
+                  debugPrint("Pinging google.com done");
+                  FocusManager.instance.primaryFocus?.unfocus();
+                } else {
+                  _formKey.currentState?.reset();
+                  _formKey.currentState!.validate();
+                }
+              },
+              child: Text(buttonText),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+List<int> checkIpAddress(String? inputValue) {
+  //IPaddress should be in format a.a.a.a:b
+  dynamic ret;
+  String tempStr;
+  ret = [0, 0, 0, 0, 0, 0];
+
+  if (inputValue == null) {
+    debugPrint("Input null");
+    return ret;
+  }
+  int index = inputValue.indexOf(".");
+  if (index == -1) {
+    debugPrint("Input invalid");
+    return ret;
+  }
+  int ip1 = int.parse(inputValue.substring(0, index).trim());
+
+  tempStr = inputValue.substring(index + 1).trim();
+  index = tempStr.indexOf(".");
+  if (index == -1) {
+    debugPrint("Input invalid");
+    return ret;
+  }
+  int ip2 = int.parse(tempStr.substring(0, index).trim());
+
+  tempStr = tempStr.substring(index + 1).trim();
+  index = tempStr.indexOf(".");
+  if (index == -1) {
+    debugPrint("Input invalid");
+    return ret;
+  }
+  int ip3 = int.parse(tempStr.substring(0, index).trim());
+
+  tempStr = tempStr.substring(index + 1).trim();
+  index = tempStr.indexOf(",");
+  if (index == -1) {
+    debugPrint("Input invalid");
+    return ret;
+  }
+  int ip4 = int.parse(tempStr.substring(0, index).trim());
+
+  int port = int.parse(tempStr.substring(index + 1).trim());
+  if (port == 0 || port > 9999) {
+    debugPrint("Input invalid");
+    return ret;
+  }
+  debugPrint("Success get Ip Address: $ip1.$ip2.$ip3.$ip4:$port ");
+  // List parts = [inputValue.substring(0,index).trim(),inputValue.substring(idx+1)]
+
+  return [1, ip1, ip2, ip3, ip4, port];
 }
 // final client = MqttServerClient.withPort('34.126.97.74', '', 1883);
 
