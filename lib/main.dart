@@ -66,22 +66,38 @@ class ConsoleWindows extends State<ConsoleWidget> {
       once = 0;
       debugPrint("Connecting to mqtt server");
       streamData += "\nNA";
+      clientConnect();
+      debugPrint("Connect has ended");
     }
-    return Column(
-      key: _formKey,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Align(
-          alignment: Alignment.centerLeft,
-          widthFactor: (MediaQuery.of(context).size.width) /
-              21, //max value is 20, offset by 1
-          child: Text(streamData),
-        ),
-      ],
+    // return Column(
+    //   key: _formKey,
+    //   crossAxisAlignment: CrossAxisAlignment.start,
+    //   children: <Widget>[
+    //     Align(
+    //       alignment: Alignment.centerLeft,
+    //       widthFactor: (MediaQuery.of(context).size.width) /
+    //           21, //max value is 20, offset by 1
+    //       child: Text(streamData),
+    //     ),
+    //   ],
+    // );
+    // return ListView.builder(
+    //     scrollDirection: Axis.vertical,
+    //     shrinkWrap: false,
+    //     itemBuilder: (context, i) => Padding(
+    //         padding: const EdgeInsets.symmetric(vertical: 38.0),
+    //         child: Text(streamData)));
+    return Expanded(
+      child: ListView(
+        scrollDirection: Axis.vertical,
+        shrinkWrap: false,
+        children: [Text(streamData)],
+      ),
     );
   }
 
   void clientConnect() async {
+    debugPrint("clientConnect clientConnect clientConnect clientConnect");
     client.logging(on: true);
     client.setProtocolV311();
     client.keepAlivePeriod = 20;
@@ -90,6 +106,7 @@ class ConsoleWindows extends State<ConsoleWidget> {
     client.onConnected = onConnected;
     client.onSubscribed = onSubscribed;
     client.pongCallback = pong;
+    client.autoReconnect = true;
 
     final connMess = MqttConnectMessage()
         .withClientIdentifier('Mqtt_MyClientUniqueId')
@@ -144,6 +161,9 @@ class ConsoleWindows extends State<ConsoleWidget> {
       debugPrint(
           'EXAMPLE::Change notification:: topic is <${c[0].topic}>, payload is <-- $pt -->');
       debugPrint('');
+      setState(() {
+        streamData += "\n---${c[0].topic}$pt";
+      });
     });
 
     /// If needed you can listen for published messages that have completed the publishing
@@ -153,39 +173,10 @@ class ConsoleWindows extends State<ConsoleWidget> {
       debugPrint(
           'EXAMPLE::Published notification:: topic is ${message.variableHeader!.topicName}, with Qos ${message.header!.qos}');
     });
-
-    /// Lets publish to our topic
-    /// Use the payload builder rather than a raw buffer
-    /// Our known topic to publish to
-    const pubTopic = 'Dart/Mqtt_client/testtopic';
-    final builder = MqttClientPayloadBuilder();
-    builder.addString('Hello from mqtt_client');
-
-    /// Subscribe to it
-    debugPrint('EXAMPLE::Subscribing to the Dart/Mqtt_client/testtopic topic');
-    client.subscribe(pubTopic, MqttQos.exactlyOnce);
-
-    /// Publish it
-    debugPrint('EXAMPLE::Publishing our topic');
-    client.publishMessage(pubTopic, MqttQos.exactlyOnce, builder.payload!);
-
-    /// Ok, we will now sleep a while, in this gap you will see ping request/response
-    /// messages being exchanged by the keep alive mechanism.
-    debugPrint('EXAMPLE::Sleeping....');
-    await MqttUtilities.asyncSleep(60);
-
-    /// Finally, unsubscribe and exit gracefully
-    debugPrint('EXAMPLE::Unsubscribing');
-    client.unsubscribe(topic);
-
-    /// Wait for the unsubscribe message from the broker if you wish.
-    await MqttUtilities.asyncSleep(2);
-    debugPrint('EXAMPLE::Disconnecting');
-    client.disconnect();
-    debugPrint('EXAMPLE::Exiting normally');
   }
 
   void onDisconnected() {
+    streamData += "\nClient has disconnected, retry after 5s";
     debugPrint(
         'EXAMPLE::OnDisconnected client callback - Client disconnection');
     if (client.connectionStatus!.disconnectionOrigin ==
@@ -207,17 +198,20 @@ class ConsoleWindows extends State<ConsoleWidget> {
 
   /// The successful connect callback
   void onConnected() {
+    streamData += "\nClient has connected";
     debugPrint(
         'EXAMPLE::OnConnected client callback - Client connection was successful');
   }
 
   /// Pong callback
   void pong() {
+    streamData += "\nPingPong message";
     debugPrint('EXAMPLE::Ping response client callback invoked');
     pongCount++;
   }
 
   void onSubscribed(String topic) {
+    streamData += "\nClient has subscribed to wildcard /b/# ";
     debugPrint('EXAMPLE::Subscription confirmed for topic $topic');
   }
 }
