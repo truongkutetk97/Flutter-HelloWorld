@@ -82,17 +82,13 @@ class ConsoleWindows extends State<ConsoleWidget> {
     //   ],
     // );
     // return ListView.builder(
-    //     scrollDirection: Axis.vertical,
-    //     shrinkWrap: false,
     //     itemBuilder: (context, i) => Padding(
     //         padding: const EdgeInsets.symmetric(vertical: 38.0),
     //         child: Text(streamData)));
-    return Expanded(
-      child: ListView(
-        scrollDirection: Axis.vertical,
-        shrinkWrap: false,
-        children: [Text(streamData)],
-      ),
+    return ListView(
+      scrollDirection: Axis.vertical,
+      reverse: true,
+      children: [Text(streamData)],
     );
   }
 
@@ -158,9 +154,9 @@ class ConsoleWindows extends State<ConsoleWidget> {
       /// lets not constrain ourselves yet until the package has been in the wild
       /// for a while.
       /// The payload is a byte buffer, this will be specific to the topic
-      debugPrint(
-          'EXAMPLE::Change notification:: topic is <${c[0].topic}>, payload is <-- $pt -->');
-      debugPrint('');
+      // debugPrint(
+      //     'EXAMPLE::Change notification:: topic is <${c[0].topic}>, payload is <-- $pt -->');
+      // debugPrint('');
       setState(() {
         streamData += "\n---${c[0].topic}$pt";
       });
@@ -233,98 +229,115 @@ class MyCustomForm extends State<InputFormWidget> {
   int newWidgetCreated = 0;
   @override
   Widget build(BuildContext context) {
-    return Form(
-      key: _formKey,
-      child: Column(
-        // crossAxisAlignment: CrossAxisAlignment.center,
-        children: <Widget>[
-          TextFormField(
-            decoration: const InputDecoration(
-              label: Center(
-                child: Text("Enter server address  "),
+    return Expanded(
+      child: Form(
+        key: _formKey,
+        child: Column(
+          // crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
+            TextFormField(
+              decoration: const InputDecoration(
+                label: Center(
+                  child: Text("Enter server address  "),
+                ),
+                hintText: 'Example: 34.126.97.74,8884',
+                floatingLabelBehavior: FloatingLabelBehavior.always,
+                // contentPadding: EdgeInsets.zero,
+                // alignLabelWithHint: true,
               ),
-              hintText: 'Example: 34.126.97.74,8884',
-              floatingLabelBehavior: FloatingLabelBehavior.always,
-              // contentPadding: EdgeInsets.zero,
-              // alignLabelWithHint: true,
-            ),
-            textAlign: TextAlign.center,
-            keyboardType: TextInputType.number,
-            validator: (String? value) {
-              if (value?.length == 0) {
-                value = '34.126.97.74,8884';
-              }
-              debugPrint("checking ipaddress");
-              ipStat = checkIpAddress(value);
-              int ipValid = ipStat[0];
-              debugPrint("ipstat =  $ipValid");
-              if (value == null || value.isEmpty || ipValid == 0) {
-                debugPrint("return invalid validator");
-                return 'Please enter valid IP address:port';
-              }
-              return null;
-            },
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16.0),
-            child: ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  buttonText = "Connecting";
-                });
-
-                // Validate will return true if the form is valid, or false if
-                // the form is invalid.
-                if (_formKey.currentState!.validate()) {
-                  // Process data.
-                  debugPrint("IP has valid");
-                  String targetIp =
-                      '${ipStat[1]}.${ipStat[2]}.${ipStat[3]}.${ipStat[4]}';
-                  debugPrint(targetIp);
-                  String fakeIp = "192.168.3.3";
-                  final stream = Ping(targetIp, count: 3, timeout: 2);
-                  debugPrint("Pinging google.com");
-                  int pingCount = 0;
-                  stream.stream.listen((d) {
-                    debugPrint(d.toString());
-                    Future.delayed(Duration(seconds: 3), () {
-                      pingCount += 1;
-                      int? time = d.response?.time?.inMilliseconds;
-                      debugPrint("rsult$pingCount = $time");
-                      if (time != null) {
-                        setState(() {
-                          buttonText = "Connected";
-                          connectionStat = 2;
-                        });
-                        if (newWidgetCreated == 0) {
-                          newWidgetCreated = 1;
-                        }
-
-                        debugPrint("Connectedddddddd");
-                      } else if (pingCount == 3) {
-                        setState(() {
-                          buttonText = "Timeout, Retry?";
-                        });
-                      } else if (d.error?.error == ErrorType.unknownHost) {
-                        setState(() {
-                          buttonText = "Timeout, Retry?";
-                        });
-                      }
-                      debugPrint(d.error?.error.toString());
-                    });
-                  });
-                  debugPrint("Pinging google.com done");
-                  FocusManager.instance.primaryFocus?.unfocus();
-                } else {
-                  _formKey.currentState?.reset();
-                  _formKey.currentState!.validate();
+              textAlign: TextAlign.center,
+              keyboardType: TextInputType.number,
+              validator: (String? value) {
+                if (value?.length == 0) {
+                  value = '34.126.97.74,8884';
                 }
+                debugPrint("checking ipaddress");
+                ipStat = checkIpAddress(value);
+                int ipValid = ipStat[0];
+                debugPrint("ipstat =  $ipValid");
+                if (value == null || value.isEmpty || ipValid == 0) {
+                  debugPrint("return invalid validator");
+                  return 'Please enter valid IP address:port';
+                }
+                return null;
               },
-              child: Text(buttonText),
             ),
-          ),
-          ConsoleWidget(data: connectionStat),
-        ],
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16.0),
+              child: ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    buttonText = "Connecting";
+                  });
+
+                  // Validate will return true if the form is valid, or false if
+                  // the form is invalid.
+                  if (_formKey.currentState!.validate()) {
+                    // Process data.
+                    debugPrint("IP has valid");
+                    String targetIp =
+                        '${ipStat[1]}.${ipStat[2]}.${ipStat[3]}.${ipStat[4]}';
+                    debugPrint(targetIp);
+                    String fakeIp = "192.168.3.3";
+                    final stream = Ping(targetIp, count: 3, timeout: 2);
+                    debugPrint("Pinging google.com");
+                    int pingCount = 0;
+                    stream.stream.listen((d) {
+                      debugPrint(d.toString());
+                      Future.delayed(Duration(seconds: 3), () {
+                        pingCount += 1;
+                        int? time = d.response?.time?.inMilliseconds;
+                        debugPrint("rsult$pingCount = $time");
+                        if (time != null) {
+                          setState(() {
+                            buttonText = "Connected";
+                            connectionStat = 2;
+                          });
+                          if (newWidgetCreated == 0) {
+                            newWidgetCreated = 1;
+                          }
+
+                          debugPrint("Connectedddddddd");
+                        } else if (pingCount == 3) {
+                          setState(() {
+                            buttonText = "Timeout, Retry?";
+                          });
+                        } else if (d.error?.error == ErrorType.unknownHost) {
+                          setState(() {
+                            buttonText = "Timeout, Retry?";
+                          });
+                        }
+                        debugPrint(d.error?.error.toString());
+                      });
+                    });
+                    debugPrint("Pinging google.com done");
+                    FocusManager.instance.primaryFocus?.unfocus();
+                  } else {
+                    _formKey.currentState?.reset();
+                    _formKey.currentState!.validate();
+                  }
+                },
+                child: Text(buttonText),
+              ),
+            ),
+            Container(
+              constraints: BoxConstraints.expand(
+                height: Theme.of(context).textTheme.headline4!.fontSize! * 1.1 +
+                    // 505.0,
+                    (MediaQuery.of(context).size.height) -
+                    290,
+              ),
+              padding: const EdgeInsets.all(8.0),
+              alignment: Alignment.centerLeft,
+              child: ConsoleWidget(data: connectionStat),
+            ),
+            // Expanded(
+            //   flex: 2,
+            //   child: ConsoleWidget(data: connectionStat),
+            // ),
+            // ConsoleWidget(data: connectionStat),
+          ],
+        ),
       ),
     );
   }
