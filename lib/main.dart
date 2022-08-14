@@ -20,7 +20,6 @@ void main() {
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -36,7 +35,7 @@ class MyApp extends StatelessWidget {
         ),
         // body: const InputFormWidget(),
         body: Column(
-          children: [InputFormWidget(), ConsoleWidget()],
+          children: [InputFormWidget()],
         ),
       ),
     );
@@ -45,7 +44,8 @@ class MyApp extends StatelessWidget {
 }
 
 class ConsoleWidget extends StatefulWidget {
-  const ConsoleWidget({Key? key}) : super(key: key);
+  final int data;
+  const ConsoleWidget({Key? key, required this.data}) : super(key: key);
 
   @override
   State<ConsoleWidget> createState() => ConsoleWindows();
@@ -53,25 +53,172 @@ class ConsoleWidget extends StatefulWidget {
 
 class ConsoleWindows extends State<ConsoleWidget> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final client = MqttServerClient.withPort('34.126.97.74', '', 1883);
+  int pongCount = -1;
+  String streamData = "NA";
+  int once = 1;
 
   @override
   Widget build(BuildContext context) {
-    debugPrint("ConsoleWindows");
-
+    debugPrint("ConsoleWindows ${widget.data}");
+    final int state = widget.data;
+    if (state == 2 && once == 1) {
+      once = 0;
+      debugPrint("Connecting to mqtt server");
+      streamData += "\nNA";
+    }
     return Column(
       key: _formKey,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: const <Widget>[
-        Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 16),
-            child: TextField(
-              decoration: InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: 'mqtt console',
-              ),
-            ))
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Align(
+          alignment: Alignment.centerLeft,
+          widthFactor: (MediaQuery.of(context).size.width) /
+              21, //max value is 20, offset by 1
+          child: Text(streamData),
+        ),
       ],
     );
+  }
+
+  void clientConnect() async {
+    client.logging(on: true);
+    client.setProtocolV311();
+    client.keepAlivePeriod = 20;
+    client.connectTimeoutPeriod = 2000; // milliseconds
+    client.onDisconnected = onDisconnected;
+    client.onConnected = onConnected;
+    client.onSubscribed = onSubscribed;
+    client.pongCallback = pong;
+
+    final connMess = MqttConnectMessage()
+        .withClientIdentifier('Mqtt_MyClientUniqueId')
+        .withWillTopic(
+            'willtopic') // If you set this you must set a will message
+        .withWillMessage('My Will message')
+        .startClean() // Non persistent session for testing
+        .withWillQos(MqttQos.atLeastOnce);
+    debugPrint('EXAMPLE::Mosquitto client connecting....');
+    client.connectionMessage = connMess;
+
+    try {
+      await client.connect();
+    } on NoConnectionException catch (e) {
+      // Raised by the client when connection fails.
+      debugPrint('EXAMPLE::client exception - $e');
+      client.disconnect();
+    } on SocketException catch (e) {
+      // Raised by the socket layer
+      debugPrint('EXAMPLE::socket exception - $e');
+      client.disconnect();
+    }
+
+    /// Check we are connected
+    if (client.connectionStatus!.state == MqttConnectionState.connected) {
+      debugPrint('EXAMPLE::Mosquitto client connected');
+    } else {
+      /// Use status here rather than state if you also want the broker return code.
+      debugPrint(
+          'EXAMPLE::ERROR Mosquitto client connection failed - disconnecting, status is ${client.connectionStatus}');
+      client.disconnect();
+      exit(-1);
+    }
+
+    /// Ok, lets try a subscription
+    debugPrint('EXAMPLE::Subscribing to the test/lol topic');
+    const topic = '/b/#'; // Not a wildcard topic
+    client.subscribe(topic, MqttQos.atMostOnce);
+
+    /// The client has a change notifier object(see the Observable class) which we then listen to to get
+    /// notifications of published updates to each subscribed topic.
+    client.updates!.listen((List<MqttReceivedMessage<MqttMessage?>>? c) {
+      final recMess = c![0].payload as MqttPublishMessage;
+      final pt =
+          MqttPublishPayload.bytesToStringAsString(recMess.payload.message);
+
+      /// The above may seem a little convoluted for users only interested in the
+      /// payload, some users however may be interested in the received publish message,
+      /// lets not constrain ourselves yet until the package has been in the wild
+      /// for a while.
+      /// The payload is a byte buffer, this will be specific to the topic
+      debugPrint(
+          'EXAMPLE::Change notification:: topic is <${c[0].topic}>, payload is <-- $pt -->');
+      debugPrint('');
+    });
+
+    /// If needed you can listen for published messages that have completed the publishing
+    /// handshake which is Qos dependant. Any message received on this stream has completed its
+    /// publishing handshake with the broker.
+    client.published!.listen((MqttPublishMessage message) {
+      debugPrint(
+          'EXAMPLE::Published notification:: topic is ${message.variableHeader!.topicName}, with Qos ${message.header!.qos}');
+    });
+
+    /// Lets publish to our topic
+    /// Use the payload builder rather than a raw buffer
+    /// Our known topic to publish to
+    const pubTopic = 'Dart/Mqtt_client/testtopic';
+    final builder = MqttClientPayloadBuilder();
+    builder.addString('Hello from mqtt_client');
+
+    /// Subscribe to it
+    debugPrint('EXAMPLE::Subscribing to the Dart/Mqtt_client/testtopic topic');
+    client.subscribe(pubTopic, MqttQos.exactlyOnce);
+
+    /// Publish it
+    debugPrint('EXAMPLE::Publishing our topic');
+    client.publishMessage(pubTopic, MqttQos.exactlyOnce, builder.payload!);
+
+    /// Ok, we will now sleep a while, in this gap you will see ping request/response
+    /// messages being exchanged by the keep alive mechanism.
+    debugPrint('EXAMPLE::Sleeping....');
+    await MqttUtilities.asyncSleep(60);
+
+    /// Finally, unsubscribe and exit gracefully
+    debugPrint('EXAMPLE::Unsubscribing');
+    client.unsubscribe(topic);
+
+    /// Wait for the unsubscribe message from the broker if you wish.
+    await MqttUtilities.asyncSleep(2);
+    debugPrint('EXAMPLE::Disconnecting');
+    client.disconnect();
+    debugPrint('EXAMPLE::Exiting normally');
+  }
+
+  void onDisconnected() {
+    debugPrint(
+        'EXAMPLE::OnDisconnected client callback - Client disconnection');
+    if (client.connectionStatus!.disconnectionOrigin ==
+        MqttDisconnectionOrigin.solicited) {
+      debugPrint(
+          'EXAMPLE::OnDisconnected callback is solicited, this is correct');
+    } else {
+      debugPrint(
+          'EXAMPLE::OnDisconnected callback is unsolicited or none, this is incorrect - exiting');
+      exit(-1);
+    }
+    if (pongCount == 3) {
+      debugPrint('EXAMPLE:: Pong count is correct');
+    } else {
+      debugPrint(
+          'EXAMPLE:: Pong count is incorrect, expected 3. actual $pongCount');
+    }
+  }
+
+  /// The successful connect callback
+  void onConnected() {
+    debugPrint(
+        'EXAMPLE::OnConnected client callback - Client connection was successful');
+  }
+
+  /// Pong callback
+  void pong() {
+    debugPrint('EXAMPLE::Ping response client callback invoked');
+    pongCount++;
+  }
+
+  void onSubscribed(String topic) {
+    debugPrint('EXAMPLE::Subscription confirmed for topic $topic');
   }
 }
 
@@ -95,7 +242,7 @@ class MyCustomForm extends State<InputFormWidget> {
     return Form(
       key: _formKey,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        // crossAxisAlignment: CrossAxisAlignment.center,
         children: <Widget>[
           TextFormField(
             decoration: const InputDecoration(
@@ -153,10 +300,9 @@ class MyCustomForm extends State<InputFormWidget> {
                       if (time != null) {
                         setState(() {
                           buttonText = "Connected";
-                          connectionStat = 1;
+                          connectionStat = 2;
                         });
                         if (newWidgetCreated == 0) {
-                          const ConsoleWidget();
                           newWidgetCreated = 1;
                         }
 
@@ -183,6 +329,7 @@ class MyCustomForm extends State<InputFormWidget> {
               child: Text(buttonText),
             ),
           ),
+          ConsoleWidget(data: connectionStat),
         ],
       ),
     );
